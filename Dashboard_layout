@@ -1,0 +1,188 @@
+'use client';
+
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Activity, Home, Settings, Wallet } from 'lucide-react';
+
+import { useToast } from '@/hooks/use-toast';
+import type { Stock } from '@/lib/types';
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarFooter,
+  SidebarInset,
+  SidebarTrigger,
+} from '@/components/ui/sidebar';
+import { Button } from './ui/button';
+
+const generateInitialHistory = (basePrice: number) => {
+  const history: { time: string; price: number }[] = [];
+  let price = basePrice;
+  const now = new Date();
+  for (let i = 19; i >= 0; i--) {
+    const time = new Date(now.getTime() - i * 2500);
+    price += (Math.random() - 0.5) * (basePrice * 0.01);
+    history.push({
+      time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      price: parseFloat(price.toFixed(2)),
+    });
+  }
+  return history;
+};
+
+const initialStocks: Stock[] = [
+  { id: '1', ticker: 'AAPL', name: 'Apple Inc.', currentPrice: 172.25, lastPrice: 172.25, stopLoss: 165, takeProfit: 185, priceHistory: generateInitialHistory(172.25) },
+  { id: '2', ticker: 'GOOGL', name: 'Alphabet Inc.', currentPrice: 138.50, lastPrice: 138.50, stopLoss: 130, takeProfit: 150, priceHistory: generateInitialHistory(138.50) },
+  { id: '3', ticker: 'TSLA', name: 'Tesla, Inc.', currentPrice: 245.80, lastPrice: 245.80, stopLoss: 230, takeProfit: 270, priceHistory: generateInitialHistory(245.80) },
+];
+
+type DashboardContextType = {
+  stocks: Stock[];
+  addStock: (stock: Omit<Stock, 'id' | 'lastPrice' | 'priceHistory' | 'currentPrice'> & { currentPrice: number }) => void;
+  updateStock: (id: string, newValues: Partial<Pick<Stock, 'stopLoss' | 'takeProfit'>>) => void;
+  removeStock: (id: string) => void;
+};
+
+export const DashboardContext = React.createContext<DashboardContextType | null>(null);
+
+export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { toast } = useToast();
+  const [stocks, setStocks] = React.useState<Stock[]>(initialStocks);
+  const alerted = React.useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setStocks((prevStocks) =>
+        prevStocks.map((stock) => {
+          const change = (Math.random() - 0.5) * (stock.currentPrice * 0.01);
+          const newPrice = parseFloat((stock.currentPrice + change).toFixed(2));
+          const newTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const newHistory = [...stock.priceHistory, { time: newTime, price: newPrice }].slice(-20);
+
+          const stopLossAlertId = `${stock.id}-sl`;
+          if (newPrice <= stock.stopLoss && !alerted.current.has(stopLossAlertId)) {
+            toast({
+              variant: 'destructive',
+              title: 'Stop-Loss Alert',
+              description: `${stock.ticker} reached its stop-loss price of $${stock.stopLoss.toFixed(2)}. Current price: $${newPrice.toFixed(2)}.`,
+            });
+            alerted.current.add(stopLossAlertId);
+          }
+
+          const takeProfitAlertId = `${stock.id}-tp`;
+          if (newPrice >= stock.takeProfit && !alerted.current.has(takeProfitAlertId)) {
+            toast({
+              title: 'Take-Profit Alert',
+              description: `${stock.ticker} reached its take-profit price of $${stock.takeProfit.toFixed(2)}. Current price: $${newPrice.toFixed(2)}.`,
+              style: { '--accent': 'hsl(var(--accent))' } as React.CSSProperties
+            });
+            alerted.current.add(takeProfitAlertId);
+          }
+
+          return { ...stock, currentPrice: newPrice, lastPrice: stock.currentPrice, priceHistory: newHistory };
+        })
+      );
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [toast]);
+
+  const addStock = (stockData: Omit<Stock, 'id' | 'lastPrice' | 'priceHistory'>) => {
+    const newStock: Stock = {
+      ...stockData,
+      id: Date.now().toString(),
+      lastPrice: stockData.currentPrice,
+      priceHistory: [
+        {
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          price: stockData.currentPrice,
+        },
+      ],
+    };
+    setStocks((prev) => [...prev, newStock]);
+    toast({
+      title: 'Stock Added',
+      description: `${stockData.ticker} has been added to your dashboard.`,
+    });
+  };
+
+  const updateStock = (id: string, newValues: Partial<Pick<Stock, 'stopLoss' | 'takeProfit'>>) => {
+    setStocks(prev => prev.map(s => s.id === id ? { ...s, ...newValues } : s));
+    toast({
+        title: 'Stock Updated',
+        description: `Your alert levels for ${stocks.find(s=>s.id === id)?.ticker} have been updated.`,
+    });
+    alerted.current.delete(`${id}-sl`);
+    alerted.current.delete(`${id}-tp`);
+  }
+
+  const removeStock = (id: string) => {
+    const ticker = stocks.find(s => s.id === id)?.ticker;
+    setStocks((prev) => prev.filter((s) => s.id !== id));
+    toast({
+        title: 'Stock Removed',
+        description: `${ticker} has been removed from your dashboard.`
+    })
+  };
+
+  return (
+    <DashboardContext.Provider value={{ stocks, addStock, updateStock, removeStock }}>
+      <SidebarProvider>
+        <Sidebar>
+          <SidebarHeader>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-sidebar-accent" asChild>
+                <Link href="/"><Wallet /></Link>
+              </Button>
+              <h2 className="text-lg font-semibold text-primary-foreground group-data-[collapsible=icon]:hidden">
+                TradeWatch
+              </h2>
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Dashboard">
+                  <Link href="/dashboard">
+                    <Home />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'} tooltip="Settings">
+                  <Link href="/dashboard/settings">
+                    <Settings />
+                    <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarFooter className="group-data-[collapsible=icon]:hidden">
+             <div className="rounded-lg bg-sidebar-accent p-4 text-center text-sm text-sidebar-accent-foreground">
+                <h4 className="font-bold">Beta Version</h4>
+                <p className="mt-1 text-xs">This is a demo application. Stock data is simulated.</p>
+             </div>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+            <div className="absolute left-4 top-4">
+               <SidebarTrigger />
+            </div>
+            <div className="p-4 pt-16 md:p-8 md:pt-8">{children}</div>
+        </SidebarInset>
+      </SidebarProvider>
+    </DashboardContext.Provider>
+  );
+}
+
+
+
