@@ -1,0 +1,90 @@
+'use client';
+import { useContext, useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StockTable } from '@/components/stock-table';
+import { AddStockDialog } from '@/components/add-stock-dialog';
+import { DashboardContext } from '@/components/dashboard-layout';
+import { StockChart } from '@/components/stock-chart';
+import { PlusCircle, LineChart } from 'lucide-react';
+import type { Stock } from '@/lib/types';
+
+export default function DashboardPage() {
+  const context = useContext(DashboardContext);
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
+
+  if (!context) {
+    return null; // or a loading spinner
+  }
+  const { stocks, addStock, updateStock, removeStock } = context;
+
+  useEffect(() => {
+    // If there's no selected stock, or the selected stock is no longer in the list, select the first one.
+    if (stocks.length > 0 && (!selectedStock || !stocks.find(s => s.id === selectedStock.id))) {
+      setSelectedStock(stocks[0]);
+    } else if (stocks.length === 0) {
+      setSelectedStock(null);
+    } else if (selectedStock) {
+        // if selected stock exists, find its updated version in stocks and update state.
+        const updatedSelectedStock = stocks.find(s => s.id === selectedStock.id);
+        if (updatedSelectedStock && updatedSelectedStock.currentPrice !== selectedStock.currentPrice) {
+            setSelectedStock(updatedSelectedStock);
+        }
+    }
+}, [stocks, selectedStock]);
+
+  const handleStockSelect = (stock: Stock) => {
+    setSelectedStock(stock);
+  };
+
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <AddStockDialog onAddStock={addStock}>
+          <Button>
+            <PlusCircle className="mr-2" />
+            Add Stock
+          </Button>
+        </AddStockDialog>
+      </div>
+
+      {stocks.length > 0 && selectedStock && <StockChart stock={selectedStock} />}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tracked Stocks</CardTitle>
+          <CardDescription>
+            Your portfolio of tracked stocks with stop-loss and take-profit alerts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {stocks.length > 0 ? (
+            <StockTable
+              stocks={stocks}
+              onUpdateStock={updateStock}
+              onRemoveStock={removeStock}
+              onStockSelect={handleStockSelect}
+              selectedStockId={selectedStock?.id}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-muted-foreground/30 py-12 text-center">
+              <LineChart className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-4 text-lg font-semibold">No stocks added yet</h3>
+              <p className="mb-4 mt-2 text-sm text-muted-foreground">
+                Add a stock to start tracking your alerts and see its price chart.
+              </p>
+              <AddStockDialog onAddStock={addStock}>
+                <Button>
+                  <PlusCircle className="mr-2" />
+                  Add Stock
+                </Button>
+              </AddStockDialog>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
