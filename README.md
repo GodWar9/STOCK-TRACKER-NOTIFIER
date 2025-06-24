@@ -1,6 +1,11 @@
 # STOCK-TRACKER-NOTIFIER
-Features :
+https://6000-firebase-studio-1750773970032.cluster-73qgvk7hjjadkrjeyexca5ivva.cloudworkstations.dev/
 
+
+
+
+
+Features :
 Interactive Dashboard: A central place to view and manage your tracked stocks.
 Real-Time Stock Tracking:
 Add stocks to your dashboard by their ticker symbol.
